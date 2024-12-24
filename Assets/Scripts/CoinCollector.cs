@@ -3,16 +3,39 @@ using TMPro;
 
 public class CoinCollector : MonoBehaviour
 {
-    public TMP_Text coinText;  // Reference to the TextMeshPro UI text
-    private int coinCount = 0;
+    public TMP_Text coinText; // Text showing coins during gameplay
+    public TMP_Text gameOverCoinText; // Text for coins in Game Over UI
+    public GameObject gameOverPanel; // Game Over panel
 
+    private int coins = 0; // Counter for coins
+
+    void Start()
+    {
+        coinText.text = "0"; // Initialize coin count
+        gameOverPanel.SetActive(false); // Hide Game Over panel initially
+    }
+
+    public void AddCoin(int amount)
+    {
+        // Increase coin count and update gameplay UI
+        coins += amount;
+        coinText.text = "" + coins;
+    }
+
+    public void GameOver()
+    {
+        // Show Game Over UI
+        gameOverPanel.SetActive(true);
+        gameOverCoinText.text = "Votes: " + coins; // Show final coins collected
+        Time.timeScale = 0; // Pause the game
+    }
+
+    // Detect obstacle collision to trigger Game Over
     void OnTriggerEnter(Collider other)
     {
-        if (other.CompareTag("Coin"))
+        if (other.CompareTag("Obstacle"))
         {
-            coinCount++;
-            Destroy(other.gameObject);
-            coinText.text = "" + coinCount; // Update UI
+            GameOver(); // Trigger Game Over when hitting an obstacle
         }
     }
 }
