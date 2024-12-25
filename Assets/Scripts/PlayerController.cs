@@ -23,8 +23,8 @@ public class PlayerMovement : MonoBehaviour
     public Transform gfx; // Reference to the GFX child object
     private Animator animator; // Animator component
 
-    private Vector2 startTouchPosition;
-    private bool isTouching = false;
+    private Vector2 startMousePosition;
+    private bool isSwiping = false;
 
     void Start()
     {
@@ -35,21 +35,17 @@ public class PlayerMovement : MonoBehaviour
         animator = gfx.GetComponent<Animator>();
 
         rb.useGravity = false; // Custom gravity
+
+        // Set target frame rate for smoother performance
+        Application.targetFrameRate = 60;
+        QualitySettings.vSyncCount = 0;
     }
 
     void Update()
     {
         transform.Translate(Vector3.forward * forwardSpeed * Time.deltaTime);
 
-        if (IsMobilePlatform())
-        {
-            HandleTouchInput();
-        }
-        else
-        {
-            HandleKeyboardInput();
-        }
-
+        HandleMouseInput();
         HandleJumping();
         HandleSliding();
         ApplyCustomGravity();
@@ -58,96 +54,54 @@ public class PlayerMovement : MonoBehaviour
         animator.SetBool("isGrounded", isGrounded);
     }
 
-    // Checks if the game is running on a mobile platform
-    bool IsMobilePlatform()
+    void HandleMouseInput()
     {
-        return (Application.platform == RuntimePlatform.Android || Application.platform == RuntimePlatform.IPhonePlayer);
-    }
-
-    void HandleTouchInput()
-    {
-        if (Input.touchCount > 0)
+        if (Input.GetMouseButtonDown(0)) // Mouse click start
         {
-            Touch touch = Input.GetTouch(0);  // Get the first touch
+            startMousePosition = Input.mousePosition;
+            isSwiping = true;
+        }
 
-            // Handle swipe direction (left-right)
-            if (touch.phase == TouchPhase.Began)
+        if (Input.GetMouseButtonUp(0) && isSwiping) // Mouse release
+        {
+            Vector2 endMousePosition = Input.mousePosition;
+            Vector2 swipeDelta = endMousePosition - startMousePosition;
+
+            if (Mathf.Abs(swipeDelta.x) > Mathf.Abs(swipeDelta.y)) // Horizontal swipe
             {
-                startTouchPosition = touch.position; // Store the starting touch position
-                isTouching = true;
-            }
-
-            if (touch.phase == TouchPhase.Moved && isTouching)
-            {
-                float swipeDistance = touch.position.x - startTouchPosition.x;
-
-                if (Mathf.Abs(swipeDistance) > 50) // Swipe threshold for movement
+                if (swipeDelta.x > 50 && currentLane < 1) // Swipe right
                 {
-                    if (swipeDistance > 0 && currentLane < 1)  // Swipe right
-                    {
-                        currentLane++;
-                    }
-                    else if (swipeDistance < 0 && currentLane > -1)  // Swipe left
-                    {
-                        currentLane--;
-                    }
-
-                    Vector3 targetPosition = new Vector3(currentLane * laneDistance, transform.position.y, transform.position.z);
-                    transform.position = Vector3.Lerp(transform.position, targetPosition, Time.deltaTime * laneSwitchSpeed);
+                    currentLane++;
+                }
+                else if (swipeDelta.x < -50 && currentLane > -1) // Swipe left
+                {
+                    currentLane--;
                 }
             }
-
-            // Handle slide (downward swipe)
-            if (touch.phase == TouchPhase.Ended && isTouching)
+            else if (swipeDelta.y > 50 && isGrounded && !isSliding) // Swipe up for jump
             {
-                Vector2 swipeDelta = touch.position - startTouchPosition;
-
-                if (swipeDelta.y < -100 && isGrounded && !isSliding)  // Downward swipe for sliding
-                {
-                    StartCoroutine(Slide());
-                }
-
-                isTouching = false;
+                animator.SetTrigger("Jump");
+                rb.linearVelocity = new Vector3(rb.linearVelocity.x, jumpForce, rb.linearVelocity.z);
+                isGrounded = false;
             }
-        }
-    }
+            else if (swipeDelta.y < -50 && isGrounded && !isSliding) // Swipe down for slide
+            {
+                StartCoroutine(Slide());
+            }
 
-    void HandleKeyboardInput()
-    {
-        // Keyboard controls for PC version
-        if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A))
-        {
-            if (currentLane > -1) currentLane--;
-        }
-        else if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
-        {
-            if (currentLane < 1) currentLane++;
+            isSwiping = false;
         }
 
         Vector3 targetPosition = new Vector3(currentLane * laneDistance, transform.position.y, transform.position.z);
-        transform.position = Vector3.Lerp(transform.position, targetPosition, Time.deltaTime * laneSwitchSpeed);
-
-        // Slide and Jump controls for PC version
-        if ((Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S)) && isGrounded && !isSliding)
-        {
-            StartCoroutine(Slide());
-        }
-
-        if ((Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W)) && isGrounded && !isSliding)
-        {
-            animator.SetTrigger("Jump");
-            rb.velocity = new Vector3(rb.velocity.x, jumpForce, rb.velocity.z);
-            isGrounded = false;
-        }
+        transform.position = Vector3.Lerp(transform.position, targetPosition, laneSwitchSpeed * Time.deltaTime);
     }
 
     void HandleJumping()
     {
         if ((Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W)) && isGrounded && !isSliding)
         {
-            Debug.Log("Jump Triggered!");
             animator.SetTrigger("Jump"); // Trigger jump animation
-            rb.velocity = new Vector3(rb.velocity.x, jumpForce, rb.velocity.z);
+            rb.linearVelocity = new Vector3(rb.linearVelocity.x, jumpForce, rb.linearVelocity.z);
             isGrounded = false;
         }
     }
@@ -156,7 +110,6 @@ public class PlayerMovement : MonoBehaviour
     {
         if ((Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S)) && isGrounded && !isSliding)
         {
-            Debug.Log("Slide Triggered!");
             StartCoroutine(Slide());
         }
     }
@@ -181,7 +134,7 @@ public class PlayerMovement : MonoBehaviour
     {
         if (!isGrounded)
         {
-            rb.velocity += Vector3.down * gravityMultiplier * Physics.gravity.y * Time.deltaTime;
+            rb.linearVelocity += Vector3.down * gravityMultiplier * Physics.gravity.y * Time.deltaTime;
         }
     }
 
